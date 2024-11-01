@@ -1,0 +1,30 @@
+version: '3'
+
+services:
+  server:
+    build:
+      context: .
+      dockerfile: server/Dockerfile
+    volumes:
+      - .:/app
+    ports:
+      - "8000:8000"
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 4048M
+
+  client:
+    build:
+      context: .
+      dockerfile: client/Dockerfile
+    volumes:
+      - .:/app
+    depends_on:
+      - server
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 4048M
