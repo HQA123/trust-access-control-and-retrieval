@@ -98,7 +98,7 @@ func (pi *DoublePIR) DecompressState(info DBinfo, p Params, comp CompressedState
 	return pi.Init(info, p)
 }
 
-func (pi *DoublePIR) Setup(DB *Database, shared State, p Params) (State, Msg) {
+func (pi *DoublePIR) Setup(DB *Database, shared State, p Params) (State, State) {
 	A1 := shared.Data[0]
 	A2 := shared.Data[1]
 
@@ -107,7 +107,8 @@ func (pi *DoublePIR) Setup(DB *Database, shared State, p Params) (State, Msg) {
 	H1.Expand(p.P, p.delta())
 	H1.ConcatCols(DB.Info.X)
 
-	H2 := MatrixMul(H1, A2)
+	H1_temp := H1.RowsDeepCopy(0, H1.Rows)
+	//H2 := MatrixMul(H1, A2)
 
 	// pack the database more tightly, because the online computation is memory-bound
 	DB.Data.Add(p.P / 2)
@@ -122,7 +123,7 @@ func (pi *DoublePIR) Setup(DB *Database, shared State, p Params) (State, Msg) {
 	}
 	A2_copy.Transpose()
 
-	return MakeState(H1, A2_copy), MakeMsg(H2)
+	return MakeState(H1, A2_copy), MakeState(H1_temp)
 }
 
 func (pi *DoublePIR) FakeSetup(DB *Database, p Params) (State, float64) {
@@ -185,9 +186,11 @@ func (pi *DoublePIR) Query(i uint64, shared State, p Params, info DBinfo) (State
 	return state, msg
 }
 
-func (pi *DoublePIR) Answer(DB *Database, query MsgSlice, server State, shared State, p Params) Msg {
+func (pi *DoublePIR) Answer(DB *Database, query MsgSlice, server State, shared State, p Params, H1_temp State) (Msg, Msg) {
 	H1 := server.Data[0]
 	A2_transpose := server.Data[1]
+	var A2 = shared.Data[1]
+	H2_temp := MatrixMul(H1_temp.Data[0], A2)
 
 	a1 := new(Matrix)
 	num_queries := uint64(len(query.Data))
@@ -220,7 +223,7 @@ func (pi *DoublePIR) Answer(DB *Database, query MsgSlice, server State, shared S
 		}
 	}
 
-	return msg
+	return msg, MakeMsg(H2_temp)
 }
 
 func (pi *DoublePIR) Recover(i uint64, batch_index uint64, offline Msg, query Msg,

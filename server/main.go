@@ -32,23 +32,23 @@ func process(conn net.Conn) {
 	fmt.Printf("Executing %s\n", pi.Name())
 
 	server_shared_state, comp_state := pi.InitCompressed(DB.Info, p)
-	bw := float64(0)
+	//bw := float64(0)
 
 	fmt.Println("Setup...")
-	server_state, offline_download := pi.Setup(DB, server_shared_state, p)
-	comm := float64(offline_download.Size() * uint64(p.Logq) / (8.0 * 1024.0))
-	fmt.Printf("\t\tOffline download: %f KB\n", comm)
-	bw += comm
+	server_state, H1_temp := pi.Setup(DB, server_shared_state, p)
+	//comm := float64(offline_download.Size() * uint64(p.Logq) / (8.0 * 1024.0))
+	//fmt.Printf("\t\tOffline download: %f KB\n", comm)
+	//bw += comm
 	runtime.GC()
 
 	// 发送comp_state和DB.Info和offline_download给客户端
 	compStateJSON, _ := json.Marshal(comp_state)
 	dbInfoJSON, _ := json.Marshal(DB.Info)
-	offline_downloadJSON, _ := json.Marshal(offline_download)
+	//offline_downloadJSON, _ := json.Marshal(offline_download)
 	message := []Message{
 		{"comp_state", compStateJSON},
 		{"DB.Info", dbInfoJSON},
-		{"offline_download", offline_downloadJSON},
+		//{"offline_download", offline_downloadJSON},
 	}
 	for _, msg := range message {
 		err := encoder.Encode(msg)
@@ -74,20 +74,24 @@ func process(conn net.Conn) {
 	}
 
 	fmt.Println("Answering query...")
-	answer := pi.Answer(DB, query, server_state, server_shared_state, p)
-	comm = float64(answer.Size() * uint64(p.Logq) / (8.0 * 1024.0))
-	fmt.Printf("\t\tOnline download: %f KB\n", comm)
-	bw += comm
+	answer, offline_download := pi.Answer(DB, query, server_state, server_shared_state, p, H1_temp)
+	//comm = float64(answer.Size() * uint64(p.Logq) / (8.0 * 1024.0))
+	//fmt.Printf("\t\tOnline download: %f KB\n", comm)
+	//bw += comm
 	runtime.GC()
 	pi.Reset(DB, p)
 
 	// 发送answer给客户端
 	answerJSON, _ := json.Marshal(answer)
-	message = []Message{{"answer", answerJSON}}
-	err = encoder.Encode(message[0])
-	if err != nil {
-		fmt.Println("Error encoding:", err)
-		return
+	offline_downloadJSON, _ := json.Marshal(offline_download)
+	message = []Message{{"answer", answerJSON},
+		{"offline_download", offline_downloadJSON}}
+	for _, msg := range message {
+		err := encoder.Encode(msg)
+		if err != nil {
+			fmt.Println("Error encoding:", err)
+			return
+		}
 	}
 	fmt.Printf("发送answer成功")
 

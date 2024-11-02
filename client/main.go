@@ -42,7 +42,7 @@ func main() {
 	//接收comp_state和DB.Info
 	var comp_state pir.CompressedState
 	var offline_download pir.Msg
-	for i := 0; i < 3; i++ { // 我们期望接收3条消息
+	for i := 0; i < 2; i++ { // 我们期望接收3条消息
 		var msg Message
 		err := decoder.Decode(&msg)
 		if err != nil {
@@ -116,15 +116,33 @@ func main() {
 	//接收服务器发送的answer
 	var answer pir.Msg
 	var msg Message
-	err = decoder.Decode(&msg)
-	if err != nil {
-		fmt.Println("Error decoding:", err)
-		return
-	}
-	err = json.Unmarshal(msg.Data, &answer)
-	if err != nil {
-		fmt.Println("Error unmarshaling answer:", err)
-		return
+	for i := 0; i < 2; i++ { // 我们期望接收2条消息
+		err := decoder.Decode(&msg)
+		if err != nil {
+			fmt.Println("Error decoding message:", err)
+			return
+		}
+
+		switch msg.Type {
+		case "answer":
+			err = json.Unmarshal(msg.Data, &answer)
+			if err != nil {
+				fmt.Println("Error unmarshaling answer:", err)
+				return
+			}
+			fmt.Println("Received answer:")
+
+		case "offline_download":
+			err = json.Unmarshal(msg.Data, &offline_download)
+			if err != nil {
+				fmt.Println("Error unmarshaling offline_download:", err)
+				return
+			}
+			fmt.Println("Received offline_download")
+
+		default:
+			fmt.Println("Unknown message type:", msg.Type)
+		}
 	}
 	fmt.Println("Received answer")
 
