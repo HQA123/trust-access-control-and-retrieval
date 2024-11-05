@@ -114,8 +114,8 @@ func (pi *DoublePIR) Setup(DB *Database, shared State, p Params) (State, State) 
 	DB.Data.Add(p.P / 2)
 	DB.Squish()
 
-	H1.Add(p.P / 2)
-	H1.Squish(10, 3)
+	//H1.Add(p.P / 2)
+	//H1.Squish(10, 3)
 
 	A2_copy := A2.RowsDeepCopy(0, A2.Rows) // deep copy whole matrix
 	if A2_copy.Rows%3 != 0 {
@@ -136,8 +136,8 @@ func (pi *DoublePIR) FakeSetup(DB *Database, p Params) (State, float64) {
 	DB.Data.Add(p.P / 2)
 	DB.Squish()
 
-	H1.Add(p.P / 2)
-	H1.Squish(10, 3)
+	//H1.Add(p.P / 2)
+	//H1.Squish(10, 3)
 
 	A2_rows := p.L / info.X
 	if A2_rows%3 != 0 {
@@ -190,14 +190,28 @@ func (pi *DoublePIR) Answer(DB *Database, query MsgSlice, server State, shared S
 	H1 := server.Data[0]
 	A2_transpose := server.Data[1]
 	var A2 = shared.Data[1]
-	H2_temp := MatrixMul(H1_temp.Data[0], A2)
+
+	// 创建mk矩阵
+	mk := new(Matrix)
+	mk.Rows = uint64(p.L)
+	mk.Cols = uint64(p.L)
+	mk.Data = make([]C.Elem, mk.Rows*mk.Rows)
+	for i := uint64(0); i < mk.Rows; i++ { // 生成单位矩阵, 但是只有前20行是1, 其他行是0
+		for j := uint64(0); j < mk.Rows; j++ {
+			if i == j && i < 11 {
+				mk.Data[i*mk.Rows+j] = 1
+			} else {
+				mk.Data[i*mk.Rows+j] = 0
+			}
+		}
+	}
 
 	a1 := new(Matrix)
 	num_queries := uint64(len(query.Data))
 	batch_sz := DB.Data.Rows / num_queries
 
 	last := uint64(0)
-	for batch, q := range query.Data {
+	for batch, q := range query.Data { // 一次处理一个batch
 		q1 := q.Data[0]
 		if batch == int(num_queries-1) {
 			batch_sz = DB.Data.Rows - last
@@ -208,14 +222,20 @@ func (pi *DoublePIR) Answer(DB *Database, query MsgSlice, server State, shared S
 		last += batch_sz
 	}
 
+	a1 = MatrixMul(mk, a1)
 	a1.TransposeAndExpandAndConcatColsAndSquish(p.P, p.delta(), DB.Info.X, 10, 3)
 	h1 := MatrixMulTransposedPacked(a1, A2_transpose, 10, 3)
 	msg := MakeMsg(h1)
 
+	H1_mk := MatrixMul(H1, mk)
+	H2 := MatrixMul(H1_mk, A2)
+	H1_mk.Add(p.P / 2)
+	H1_mk.Squish(10, 3)
+
 	for _, q := range query.Data {
 		for j := uint64(0); j < DB.Info.Ne/DB.Info.X; j++ {
 			q2 := q.Data[1+j]
-			a2 := MatrixMulVecPacked(H1, q2, 10, 3)
+			a2 := MatrixMulVecPacked(H1_mk, q2, 10, 3)
 			h2 := MatrixMulVecPacked(a1, q2, 10, 3)
 
 			msg.Data = append(msg.Data, a2)
@@ -223,7 +243,7 @@ func (pi *DoublePIR) Answer(DB *Database, query MsgSlice, server State, shared S
 		}
 	}
 
-	return msg, MakeMsg(H2_temp)
+	return msg, MakeMsg(H2)
 }
 
 func (pi *DoublePIR) Recover(i uint64, batch_index uint64, offline Msg, query Msg,
